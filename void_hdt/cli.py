@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 import click
-
 from rdflib_hdt import HDTDocument
 
 from void_hdt.partitions import PartitionAnalyzer
