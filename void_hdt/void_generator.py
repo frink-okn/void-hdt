@@ -4,7 +4,6 @@ import hashlib
 
 from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import VOID, XSD
-
 from rdflib_hdt import HDTDocument
 
 from void_hdt.partitions import PartitionAnalyzer
