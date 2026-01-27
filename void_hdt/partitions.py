@@ -4,8 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 
 from rdflib import RDF, BNode, Literal, URIRef
-
-from void_hdt.hdt_reader import HDTReader
+from rdflib_hdt import HDTDocument
 
 type RDFTerm = URIRef | Literal | BNode
 
@@ -101,25 +100,27 @@ class PartitionAnalyzer:
         # Dataset-level property counts (all triples, regardless of typing)
         self.dataset_property_counts: dict[RDFTerm, int] = defaultdict(int)
 
-    def analyze(self, reader: HDTReader) -> None:
-        """Analyze partitions from an HDT reader.
+    def analyze(self, document: HDTDocument) -> None:
+        """Analyze partitions from an HDT document.
 
         This is a two-pass process:
         1. First pass: identify all instances and their classes via rdf:type
         2. Second pass: count property usage for each class, with target class breakdown
 
         Args:
-            reader: HDT reader to analyze
+            document: HDT document to analyze
         """
         # First pass: collect all rdf:type statements
-        for triple in reader.iter_triples(predicate=RDF.type):
+        type_triples, _ = document.search((None, RDF.type, None))
+        for triple in type_triples:
             subject, _, obj = triple
             # obj is the class, subject is the instance
             if isinstance(obj, URIRef):  # Classes should be URIs
                 self._add_instance_to_class(subject, obj)
 
         # Second pass: count property usage for each class with target class tracking
-        for triple in reader.iter_triples():
+        all_triples, _ = document.search((None, None, None))
+        for triple in all_triples:
             subject, predicate, obj = triple
 
             # Count all properties at dataset level

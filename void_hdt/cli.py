@@ -5,9 +5,9 @@ from pathlib import Path
 
 import click
 
-from void_hdt.hdt_reader import HDTReader
+from rdflib_hdt import HDTDocument
+
 from void_hdt.partitions import PartitionAnalyzer
-from void_hdt.statistics import DatasetStatistics
 from void_hdt.void_generator import VOIDGenerator
 
 
@@ -42,26 +42,25 @@ def main(hdt_file: Path, output: Path, dataset_uri: str) -> None:
         void_gen = VOIDGenerator(dataset_uri=dataset_uri)
 
         # Open HDT file
-        with HDTReader(str(hdt_file)) as reader:
-            # Get statistics from HDT index (O(1) - no iteration needed)
-            click.echo("Reading dataset statistics from HDT index...")
-            stats = DatasetStatistics.from_reader(reader)
+        document = HDTDocument(str(hdt_file))
 
-            click.echo(f"  Triples: {stats.triple_count}")
-            click.echo(f"  Distinct subjects: {stats.distinct_subjects}")
-            click.echo(f"  Distinct predicates: {stats.distinct_predicates}")
-            click.echo(f"  Distinct objects: {stats.distinct_objects}")
+        # Get statistics from HDT index (O(1) - no iteration needed)
+        click.echo("Reading dataset statistics from HDT index...")
+        click.echo(f"  Triples: {document.total_triples}")
+        click.echo(f"  Distinct subjects: {document.nb_subjects}")
+        click.echo(f"  Distinct predicates: {document.nb_predicates}")
+        click.echo(f"  Distinct objects: {document.nb_objects}")
 
-            # Analyze class and property partitions (two passes through data)
-            click.echo("Analyzing class partitions...")
-            analyzer.analyze(reader)
+        # Analyze class and property partitions (two passes through data)
+        click.echo("Analyzing class partitions...")
+        analyzer.analyze(document)
 
-            class_count = len(analyzer.class_partitions)
-            click.echo(f"  Found {class_count} classes")
+        class_count = len(analyzer.class_partitions)
+        click.echo(f"  Found {class_count} classes")
 
         # Generate VOID description
         click.echo("Generating VOID description...")
-        void_gen.add_dataset_statistics(stats)
+        void_gen.add_dataset_statistics(document)
         void_gen.add_dataset_property_partitions(analyzer)
         void_gen.add_class_partitions(analyzer)
 

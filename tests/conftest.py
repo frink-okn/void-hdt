@@ -1,4 +1,4 @@
-"""Pytest fixtures and mock HDTReader for testing."""
+"""Pytest fixtures and mock HDTDocument for testing."""
 
 from collections.abc import Iterator
 
@@ -10,14 +10,15 @@ type Triple = tuple[RDFTerm, RDFTerm, RDFTerm]
 type PatternTerm = URIRef | Literal
 
 
-class MockHDTReader:
-    """Mock HDTReader that works with in-memory RDF graphs.
+class MockHDTDocument:
+    """Mock HDTDocument that works with in-memory RDF graphs.
 
     This allows testing the VOID processing logic without actual HDT files.
+    Mimics the interface of rdflib_hdt.HDTDocument.
     """
 
     def __init__(self, graph: Graph) -> None:
-        """Initialize mock reader from an RDF graph.
+        """Initialize mock document from an RDF graph.
 
         Args:
             graph: RDFLib graph containing triples to process
@@ -33,22 +34,19 @@ class MockHDTReader:
             self._predicates.add(p)
             self._objects.add(o)
 
-    def iter_triples(
-        self,
-        subject: PatternTerm | None = None,
-        predicate: PatternTerm | None = None,
-        obj: PatternTerm | None = None,
-    ) -> Iterator[Triple]:
-        """Iterate over triples matching the given pattern.
+    def search(
+        self, pattern: tuple[PatternTerm | None, PatternTerm | None, PatternTerm | None]
+    ) -> tuple[Iterator[Triple], int]:
+        """Search for triples matching the given pattern.
 
         Args:
-            subject: Subject filter (None for any)
-            predicate: Predicate filter (None for any)
-            obj: Object filter (None for any)
+            pattern: Tuple of (subject, predicate, object) filters (None for any)
 
-        Yields:
-            Matching triples as (subject, predicate, object) tuples
+        Returns:
+            Tuple of (iterator over matching triples, count of matches)
         """
+        subject, predicate, obj = pattern
+        matches: list[Triple] = []
         for s, p, o in self._triples:
             if subject is not None and s != subject:
                 continue
@@ -56,10 +54,11 @@ class MockHDTReader:
                 continue
             if obj is not None and o != obj:
                 continue
-            yield (s, p, o)
+            matches.append((s, p, o))
+        return iter(matches), len(matches)
 
     @property
-    def nb_triples(self) -> int:
+    def total_triples(self) -> int:
         """Get total number of triples."""
         return len(self._triples)
 
@@ -78,18 +77,6 @@ class MockHDTReader:
         """Get number of distinct objects."""
         return len(self._objects)
 
-    def close(self) -> None:
-        """Close the mock reader (no-op)."""
-        pass
-
-    def __enter__(self) -> "MockHDTReader":
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        """Context manager exit."""
-        self.close()
-
 
 @pytest.fixture
 def ex() -> str:
@@ -104,10 +91,10 @@ def create_graph() -> type[Graph]:
 
 
 @pytest.fixture
-def create_reader():
-    """Factory for creating mock HDT readers from graphs."""
+def create_document():
+    """Factory for creating mock HDT documents from graphs."""
 
-    def _create(graph: Graph) -> MockHDTReader:
-        return MockHDTReader(graph)
+    def _create(graph: Graph) -> MockHDTDocument:
+        return MockHDTDocument(graph)
 
     return _create

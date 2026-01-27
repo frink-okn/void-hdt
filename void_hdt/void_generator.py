@@ -5,8 +5,9 @@ import hashlib
 from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import VOID, XSD
 
+from rdflib_hdt import HDTDocument
+
 from void_hdt.partitions import PartitionAnalyzer
-from void_hdt.statistics import DatasetStatistics
 
 # VOID extension namespace (from ldf.fi)
 VOIDEXT = Namespace("http://ldf.fi/void-ext#")
@@ -45,18 +46,18 @@ class VOIDGenerator:
         """
         return hashlib.md5(iri.encode("utf-8")).hexdigest()
 
-    def add_dataset_statistics(self, stats: DatasetStatistics) -> None:
+    def add_dataset_statistics(self, document: HDTDocument) -> None:
         """Add dataset-level statistics to the VOID description.
 
         Args:
-            stats: Dataset statistics to add
+            document: HDT document to get statistics from (O(1) via HDT index)
         """
         # Declare this is a VOID Dataset
         self.graph.add((self.dataset_uri, RDF.type, VOID.Dataset))
 
         # Add triple count
         self.graph.add(
-            (self.dataset_uri, VOID.triples, Literal(stats.triple_count, datatype=XSD.integer))
+            (self.dataset_uri, VOID.triples, Literal(document.total_triples, datatype=XSD.integer))
         )
 
         # Add distinct counts
@@ -64,21 +65,21 @@ class VOIDGenerator:
             (
                 self.dataset_uri,
                 VOID.distinctSubjects,
-                Literal(stats.distinct_subjects, datatype=XSD.integer),
+                Literal(document.nb_subjects, datatype=XSD.integer),
             )
         )
         self.graph.add(
             (
                 self.dataset_uri,
                 VOID.properties,
-                Literal(stats.distinct_predicates, datatype=XSD.integer),
+                Literal(document.nb_predicates, datatype=XSD.integer),
             )
         )
         self.graph.add(
             (
                 self.dataset_uri,
                 VOID.distinctObjects,
-                Literal(stats.distinct_objects, datatype=XSD.integer),
+                Literal(document.nb_objects, datatype=XSD.integer),
             )
         )
 
