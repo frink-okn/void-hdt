@@ -1,0 +1,45 @@
+[project]
+name = "void-hdt"
+version = "0.1.0"
+description = "Efficiently process RDF HDT files to generate VOID vocabulary descriptions"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "rdflib-hdt>=3.1",
+    "rdflib>=7.0.0",
+    "click>=8.1.0",
+]
+
+[project.scripts]
+void-hdt = "void_hdt.cli:main"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pyparsing.exceptions.PyparsingDeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.ty]
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.terminal]
+error-on-warning = true
+output-format = "full"
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.14.14",
+]
