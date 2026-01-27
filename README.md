@@ -9,10 +9,12 @@ void-hdt analyzes HDT files and produces comprehensive metadata about RDF datase
 ## Features
 
 - **Dataset Statistics**: Total triples, distinct subjects, predicates, and objects
+- **Dataset Property Partitions**: Triple counts per property across all triples
 - **Class Partitions**: Identifies classes (via `rdf:type`) and counts instances
 - **Property Partitions**: For each class, documents property usage and triple counts
+- **Object Class Partitions**: Breakdown of object classes for each property partition
 - **Efficient Processing**: Iterator-based design for memory-efficient handling of large files
-- **Turtle Output**: Generates clean, readable VOID descriptions in Turtle format
+- **Turtle Output**: Generates VOID descriptions in Turtle format
 
 ## Installation
 
@@ -53,31 +55,50 @@ void-hdt data/mydata.hdt -o void-description.ttl --dataset-uri http://example.or
 The tool generates a VOID description in Turtle format that includes:
 
 - Dataset-level statistics (triples, distinct subjects/predicates/objects)
-- Class partitions with entity counts
+- Dataset-level property partitions showing triple counts per property
+- Class partitions with entity and triple counts
 - Property partitions within each class partition showing triple counts per property
+- Object class partitions showing the breakdown of object types for each property
 
 Example output structure:
 
 ```turtle
 @prefix void: <http://rdfs.org/ns/void#> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix voidext: <http://ldf.fi/void-ext#> .
 
 <http://example.org/dataset> a void:Dataset ;
     void:triples 1000000 ;
     void:distinctSubjects 50000 ;
     void:properties 25 ;
     void:distinctObjects 75000 ;
-    void:classPartition <http://example.org/dataset/class/Person> .
+    void:propertyPartition <http://example.org/dataset/property/abc123...> ;
+    void:classPartition <http://example.org/dataset/class/def456...> .
 
-<http://example.org/dataset/class/Person> a void:Dataset ;
-    void:class <Person> ;
+# Dataset-level property partition
+<http://example.org/dataset/property/abc123...> a void:Dataset ;
+    void:property <http://example.org/name> ;
+    void:triples 50000 .
+
+# Class partition
+<http://example.org/dataset/class/def456...> a void:Dataset ;
+    void:class <http://example.org/Person> ;
     void:entities 10000 ;
-    void:propertyPartition <http://example.org/dataset/class/Person/property/name> .
+    void:triples 30000 ;
+    void:propertyPartition <http://example.org/dataset/class/def456.../property/789abc...> .
 
-<http://example.org/dataset/class/Person/property/name> a void:Dataset ;
-    void:property <name> ;
-    void:triples 10000 .
+# Property partition within class
+<http://example.org/dataset/class/def456.../property/789abc...> a void:Dataset ;
+    void:property <http://example.org/worksFor> ;
+    void:triples 8000 ;
+    voidext:objectClassPartition <.../target/xyz789...> .
+
+# Object class partition
+<.../target/xyz789...> a void:Dataset ;
+    void:class <http://example.org/Company> ;
+    void:triples 8000 .
 ```
+
+Note: Partition URIs use MD5 hashes of the original IRIs to ensure syntactically valid URIs. The original IRIs are preserved via `void:class` and `void:property` predicates.
 
 ## Development
 
