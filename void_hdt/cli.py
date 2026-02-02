@@ -24,7 +24,13 @@ from void_hdt.void_generator import VOIDGenerator
     default="http://example.org/dataset",
     help="URI for the dataset being described",
 )
-def main(hdt_file: Path, output: Path, dataset_uri: str) -> None:
+@click.option(
+    "--use-blank-nodes",
+    is_flag=True,
+    default=False,
+    help="Use blank nodes for partition nodes instead of URI references",
+)
+def main(hdt_file: Path, output: Path, dataset_uri: str, use_blank_nodes: bool) -> None:
     """Generate VOID vocabulary descriptions from HDT files.
 
     Processes an HDT file to extract dataset statistics, class partitions,
@@ -38,7 +44,7 @@ def main(hdt_file: Path, output: Path, dataset_uri: str) -> None:
     try:
         # Initialize components
         analyzer = PartitionAnalyzer()
-        void_gen = VOIDGenerator(dataset_uri=dataset_uri)
+        void_gen = VOIDGenerator(dataset_uri=dataset_uri, use_blank_nodes=use_blank_nodes)
 
         # Open HDT file
         document = HDTDocument(str(hdt_file))

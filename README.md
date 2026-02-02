@@ -43,6 +43,7 @@ void-hdt input.hdt -o output.ttl
 - `HDT_FILE`: Path to the input HDT file (required)
 - `-o, --output PATH`: Output file path for VOID description (required)
 - `--dataset-uri URI`: URI for the dataset being described (default: `http://example.org/dataset`)
+- `--use-blank-nodes`: Use blank nodes for partition nodes instead of URI references (optional)
 
 ### Example
 

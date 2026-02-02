@@ -2,7 +2,7 @@
 
 import hashlib
 
-from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
+from rdflib import RDF, RDFS, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import VOID, XSD
 from rdflib_hdt import HDTDocument
 
@@ -15,13 +15,17 @@ VOIDEXT = Namespace("http://ldf.fi/void-ext#")
 class VOIDGenerator:
     """Generate VOID descriptions for RDF datasets."""
 
-    def __init__(self, dataset_uri: str = "http://example.org/dataset") -> None:
+    def __init__(
+        self, dataset_uri: str = "http://example.org/dataset", use_blank_nodes: bool = False
+    ) -> None:
         """Initialize VOID generator.
 
         Args:
             dataset_uri: URI for the dataset being described
+            use_blank_nodes: Use blank nodes for partition nodes instead of URI references
         """
         self.dataset_uri = URIRef(dataset_uri)
+        self.use_blank_nodes = use_blank_nodes
         self.graph = Graph()
         self._bind_namespaces()
 
@@ -44,6 +48,20 @@ class VOIDGenerator:
             MD5 hash as a hexadecimal string
         """
         return hashlib.md5(iri.encode("utf-8")).hexdigest()
+
+    def _create_partition_node(self, uri_path: str) -> URIRef | BNode:
+        """Create a partition node as either a blank node or URI reference.
+
+        Args:
+            uri_path: The URI path to use if creating a URIRef
+
+        Returns:
+            Either a BNode (if use_blank_nodes is True) or URIRef
+        """
+        if self.use_blank_nodes:
+            return BNode()
+        else:
+            return URIRef(uri_path)
 
     def add_dataset_statistics(self, document: HDTDocument) -> None:
         """Add dataset-level statistics to the VOID description.
@@ -94,7 +112,9 @@ class VOIDGenerator:
         for predicate, count in analyzer.iter_dataset_properties():
             # Create property partition URI using MD5 hash of the predicate URI
             predicate_hash = self._hash_iri(str(predicate))
-            prop_partition_uri = URIRef(f"{self.dataset_uri}/property/{predicate_hash}")
+            prop_partition_uri = self._create_partition_node(
+                f"{self.dataset_uri}/property/{predicate_hash}"
+            )
 
             # Declare property partition
             self.graph.add((prop_partition_uri, RDF.type, VOID.Dataset))
@@ -121,7 +141,7 @@ class VOIDGenerator:
         for partition in analyzer.iter_partitions():
             # Create a URI for this partition using MD5 hash of the class URI
             class_hash = self._hash_iri(str(partition.class_uri))
-            partition_uri = URIRef(f"{self.dataset_uri}/class/{class_hash}")
+            partition_uri = self._create_partition_node(f"{self.dataset_uri}/class/{class_hash}")
 
             # Declare it as a class partition
             self.graph.add((partition_uri, RDF.type, VOID.Dataset))
@@ -154,7 +174,9 @@ class VOIDGenerator:
 
                 # Create property partition URI using MD5 hash of the predicate URI
                 predicate_hash = self._hash_iri(str(predicate))
-                prop_partition_uri = URIRef(f"{partition_uri}/property/{predicate_hash}")
+                prop_partition_uri = self._create_partition_node(
+                    f"{partition_uri}/property/{predicate_hash}"
+                )
 
                 # Declare property partition
                 self.graph.add((prop_partition_uri, RDF.type, VOID.Dataset))
@@ -177,7 +199,9 @@ class VOIDGenerator:
                     if target_class is None:
                         # Literals or untyped URIs - use special hash
                         target_hash = self._hash_iri("__untyped__")
-                        target_partition_uri = URIRef(f"{prop_partition_uri}/target/{target_hash}")
+                        target_partition_uri = self._create_partition_node(
+                            f"{prop_partition_uri}/target/{target_hash}"
+                        )
 
                         # Declare target partition (no void:class for untyped)
                         self.graph.add((target_partition_uri, RDF.type, VOID.Dataset))
@@ -187,7 +211,9 @@ class VOIDGenerator:
                     else:
                         # Typed target class
                         target_hash = self._hash_iri(str(target_class))
-                        target_partition_uri = URIRef(f"{prop_partition_uri}/target/{target_hash}")
+                        target_partition_uri = self._create_partition_node(
+                            f"{prop_partition_uri}/target/{target_hash}"
+                        )
 
                         # Declare target partition with class link
                         self.graph.add((target_partition_uri, RDF.type, VOID.Dataset))
