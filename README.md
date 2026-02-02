@@ -18,7 +18,15 @@ void-hdt analyzes HDT files and produces comprehensive metadata about RDF datase
 
 ## Installation
 
-### Using uv (recommended)
+### Using Docker (recommended for quick usage)
+
+Build the Docker image:
+
+```bash
+docker build -t void-hdt .
+```
+
+### Using uv (for development)
 
 ```bash
 uv sync
@@ -31,6 +39,25 @@ pip install -e .
 ```
 
 ## Usage
+
+### Docker
+
+Process an HDT file using Docker:
+
+```bash
+docker run --rm -v /path/to/data:/data void-hdt /data/input.hdt -o /data/output.ttl
+```
+
+Or with custom dataset URI:
+
+```bash
+docker run --rm -v /path/to/data:/data void-hdt \
+  /data/input.hdt \
+  -o /data/output.ttl \
+  --dataset-uri http://example.org/mydata
+```
+
+### Local Installation
 
 ### Command Line
 
