@@ -1,5 +1,6 @@
 """Command-line interface for void-hdt."""
 
+import resource
 import sys
 from pathlib import Path
 
@@ -8,6 +9,14 @@ from rdflib_hdt import HDTDocument
 
 from void_hdt.partitions import PartitionAnalyzer
 from void_hdt.void_generator import VOIDGenerator
+
+
+def _get_rss_gb() -> float:
+    """Get peak RSS in GB."""
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform == "darwin":
+        return usage / (1024**3)  # macOS: bytes
+    return usage / (1024**2)  # Linux: KB
 
 
 @click.command()
@@ -30,7 +39,20 @@ from void_hdt.void_generator import VOIDGenerator
     default=False,
     help="Use blank nodes for partition nodes instead of URI references",
 )
-def main(hdt_file: Path, output: Path, dataset_uri: str, use_blank_nodes: bool) -> None:
+@click.option(
+    "--cache-size",
+    type=int,
+    default=2_000_000,
+    show_default=True,
+    help="Max entries in the type-lookup cache (trades memory for speed)",
+)
+def main(
+    hdt_file: Path,
+    output: Path,
+    dataset_uri: str,
+    use_blank_nodes: bool,
+    cache_size: int,
+) -> None:
     """Generate VOID vocabulary descriptions from HDT files.
 
     Processes an HDT file to extract dataset statistics, class partitions,
@@ -57,8 +79,13 @@ def main(hdt_file: Path, output: Path, dataset_uri: str, use_blank_nodes: bool) 
         click.echo(f"  Distinct objects: {document.nb_objects}")
 
         # Analyze class and property partitions (two passes through data)
+        click.echo(f"Peak RSS before analysis: {_get_rss_gb():.1f} GB")
         click.echo("Analyzing class partitions...")
-        analyzer.analyze(document)
+
+        def _progress(msg: str) -> None:
+            click.echo(f"{msg}  [RSS: {_get_rss_gb():.1f} GB]")
+
+        analyzer.analyze(document, cache_size=cache_size, progress_fn=_progress)
 
         class_count = len(analyzer.class_partitions)
         click.echo(f"  Found {class_count} classes")
