@@ -137,6 +137,12 @@ class PartitionAnalyzer:
         # Get rdf:type predicate ID (0 if not in dataset)
         type_pred_id: int = document.term_to_id(RDF.type, 1)
         nb_shared: int = document.nb_shared
+        nb_subjects: int = document.nb_subjects
+
+        # Bitmap tracking which subject IDs have rdf:type triples.
+        # Allows O(1) skip of untyped subjects/objects in Pass 2,
+        # eliminating millions of fruitless search_ids calls (~20 MB for 160M subjects).
+        typed_bitmap = bytearray(nb_subjects // 8 + 1)
 
         class_id_to_term: dict[int, RDFTerm] = {}
 
@@ -148,8 +154,9 @@ class PartitionAnalyzer:
             _log(f"  rdf:type triples to process: {type_count:,}")
 
             class_id_counts: dict[int, int] = defaultdict(int)
-            for i, (_s_id, _p_id, class_id) in enumerate(type_triples):
+            for i, (s_id, _p_id, class_id) in enumerate(type_triples):
                 class_id_counts[class_id] += 1
+                typed_bitmap[s_id >> 3] |= 1 << (s_id & 7)
                 if progress_fn and i % 10_000_000 == 0 and i > 0:
                     _log(f"  Pass 1: {i:,} type triples processed")
 
@@ -161,7 +168,8 @@ class PartitionAnalyzer:
                     self.class_partitions[term] = ClassPartition(term)
                     self.class_partitions[term].instance_count = count
 
-            _log(f"  Found {len(self.class_partitions)} classes")
+            typed_count = sum(b.bit_count() for b in typed_bitmap)
+            _log(f"  Found {len(self.class_partitions)} classes, {typed_count:,} typed subjects")
         else:
             _log("  No rdf:type predicate found in dataset")
 
@@ -209,8 +217,9 @@ class PartitionAnalyzer:
             self.dataset_property_counts[predicate] += 1
 
             # Look up subject types (single-entry cache, SPO-ordered)
+            # Bitmap check eliminates search_ids calls for untyped subjects
             if s_id != prev_subject_id:
-                if type_pred_id != 0:
+                if typed_bitmap[s_id >> 3] & (1 << (s_id & 7)):
                     prev_subject_types = _search_types_by_id(s_id)
                 else:
                     prev_subject_types = _EMPTY_FROZENSET
@@ -220,8 +229,8 @@ class PartitionAnalyzer:
                 continue
 
             # Look up object types
-            if o_id > nb_shared:
-                # Object-only term: can never be a subject, so no types
+            # Bitmap check skips untyped objects; nb_shared check skips object-only terms
+            if o_id > nb_shared or not (typed_bitmap[o_id >> 3] & (1 << (o_id & 7))):
                 target_classes = _UNTYPED_TARGET
             else:
                 obj_classes = obj_type_cache.get(o_id)
