@@ -140,6 +140,12 @@ Note: Partition URIs use MD5 hashes of the original IRIs to ensure syntactically
 - ty for type checking
 - ruff for formatting and linting
 
+### Running Tests
+
+```bash
+uv run pytest -v
+```
+
 ### Type Checking
 
 ```bash
