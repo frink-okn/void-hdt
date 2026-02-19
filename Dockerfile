@@ -23,26 +23,32 @@ RUN uv sync --frozen --no-dev
 # Copy the application code
 COPY void_hdt/ ./void_hdt/
 
+# Install the project itself into the venv
+RUN uv sync --frozen --no-dev
+
 # Runtime stage: slim image with only runtime dependencies
 FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install uv in runtime image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Install runtime C++ libraries (needed to run the compiled rdflib-hdt)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the virtual environment from builder
+# Copy the virtual environment
 COPY --from=builder /app/.venv /app/.venv
-
-# Copy the application code
 COPY --from=builder /app/void_hdt /app/void_hdt
 
-# Copy project files needed by uv
-COPY pyproject.toml uv.lock ./
+# Place the venv binaries on the PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Ensure Python can find the module in /app
+ENV PYTHONPATH="/app"
 
 # Set the entrypoint to use uv run (handles environment automatically)
-ENTRYPOINT ["uv", "run", "void-hdt"]
+ENTRYPOINT ["void-hdt"]
 
 # Default help command if no args provided
 CMD ["--help"]
