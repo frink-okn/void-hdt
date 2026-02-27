@@ -128,6 +128,59 @@ Example output structure:
 
 Note: Partition URIs use MD5 hashes of the original IRIs to ensure syntactically valid URIs. The original IRIs are preserved via `void:class` and `void:property` predicates.
 
+## Output Schema
+
+The following Mermaid diagram summarizes the VoID structure produced by this tool.
+The source for this diagram is also available in [void-output-schema-class.mmd](void-output-schema-class.mmd).
+
+```mermaid
+classDiagram
+    class Dataset {
+        void:triples : xsd:integer
+        void:distinctSubjects : xsd:integer
+        void:properties : xsd:integer
+        void:distinctObjects : xsd:integer
+    }
+
+    class DatasetPropertyPartition {
+        void:property : IRI
+        void:triples : xsd:integer
+    }
+
+    class ClassPartition {
+        void:class : IRI
+        void:entities : xsd:integer
+        void:triples : xsd:integer
+    }
+
+    class ClassPropertyPartition {
+        void:property : IRI
+        void:triples : xsd:integer
+    }
+
+    class ObjectClassPartition {
+        void:class : IRI
+        void:triples : xsd:integer
+    }
+
+    class UntypedObjectPartition {
+        void:triples : xsd:integer
+    }
+
+    Dataset "1" --> "0..*" DatasetPropertyPartition : void#58;propertyPartition
+    Dataset "1" --> "0..*" ClassPartition : void#58;classPartition
+    ClassPartition "1" --> "0..*" ClassPropertyPartition : void#58;propertyPartition
+    ClassPropertyPartition "1" --> "0..*" ObjectClassPartition : voidext#58;objectClassPartition
+    ClassPropertyPartition "1" --> "0..*" UntypedObjectPartition : voidext#58;objectClassPartition
+
+    note for Dataset "rdf:type void:Dataset"
+    note for DatasetPropertyPartition "rdf:type void:Dataset"
+    note for ClassPartition "rdf:type void:Dataset"
+    note for ClassPropertyPartition "rdf:type void:Dataset"
+    note for ObjectClassPartition "rdf:type void:Dataset"
+    note for UntypedObjectPartition "rdf:type void:Dataset"
+```
+
 ## Development
 
 ### Requirements
