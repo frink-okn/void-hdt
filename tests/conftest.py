@@ -1,6 +1,7 @@
 """Pytest fixtures and mock HDTDocument for testing."""
 
 from collections.abc import Iterator
+from typing import cast
 
 import pytest
 from rdflib import BNode, Graph, Literal, URIRef
@@ -31,7 +32,7 @@ class MockHDTDocument:
             graph: RDFLib graph containing triples to process
         """
         self.graph = graph
-        self._triples: list[Triple] = [(s, p, o) for s, p, o in graph]
+        self._triples: list[Triple] = [cast(Triple, (s, p, o)) for s, p, o in graph]
         self._subjects: set[RDFTerm] = set()
         self._predicates: set[RDFTerm] = set()
         self._objects: set[RDFTerm] = set()
