@@ -8,72 +8,84 @@ from rdflib_hdt import HDTDocument
 
 type RDFTerm = URIRef | Literal | BNode
 
+# Sentinel ID for literals or untyped URIs (0 is never a valid HDT ID)
+UNTYPED_TARGET_ID = 0
+
 # Reusable constants to avoid allocating new frozensets per triple
-_EMPTY_FROZENSET: frozenset[RDFTerm | None] = frozenset()
-_UNTYPED_TARGET: frozenset[RDFTerm | None] = frozenset({None})
+_EMPTY_FROZENSET: frozenset[int] = frozenset()
+_UNTYPED_TARGET: frozenset[int] = frozenset({UNTYPED_TARGET_ID})
 
 
 class PropertyPartition:
     """Represents a property partition with target class breakdowns."""
 
-    def __init__(self, predicate: RDFTerm) -> None:
+    def __init__(self, predicate_id: int) -> None:
         """Initialize property partition.
 
         Args:
-            predicate: The property/predicate URI
+            predicate_id: The HDT integer ID for this property/predicate
         """
-        self.predicate = predicate
+        self.predicate_id = predicate_id
         self.total_count: int = 0
-        # Target class -> count of triples with objects of that class
-        # None key represents literals or untyped URIs
-        self.target_class_counts: dict[RDFTerm | None, int] = defaultdict(int)
+        # Target class ID -> count of triples with objects of that class
+        # UNTYPED_TARGET_ID (0) represents literals or untyped URIs
+        self.target_class_counts: dict[int, int] = defaultdict(int)
 
-    def add_triple(self, target_classes: frozenset[RDFTerm | None]) -> None:
+    def add_triple(self, target_class_ids: frozenset[int]) -> None:
         """Record a triple using this property.
 
         Increments total_count by 1 (for the single triple), and increments
         target_class_counts for each class the object belongs to.
 
         Args:
-            target_classes: Classes the object belongs to, or {None} for literals/untyped
+            target_class_ids: Class IDs the object belongs to, or {0} for literals/untyped
         """
         self.total_count += 1
-        for target_class in target_classes:
-            self.target_class_counts[target_class] += 1
+        for class_id in target_class_ids:
+            self.target_class_counts[class_id] += 1
 
-    def iter_target_classes(self) -> Iterator[tuple[RDFTerm | None, int]]:
-        """Iterate over target class counts.
+    def iter_target_classes(
+        self, class_id_to_term: dict[int, RDFTerm]
+    ) -> Iterator[tuple[RDFTerm | None, int]]:
+        """Iterate over target class counts, resolving IDs to terms.
+
+        Args:
+            class_id_to_term: Mapping from class IDs to RDFLib terms
 
         Yields:
-            Tuples of (target_class, count)
+            Tuples of (target_class_term_or_None, count)
         """
-        yield from self.target_class_counts.items()
+        for class_id, count in self.target_class_counts.items():
+            if class_id == UNTYPED_TARGET_ID:
+                yield (None, count)
+            else:
+                yield (class_id_to_term[class_id], count)
 
 
 class ClassPartition:
     """Represents a class partition with its property partitions."""
 
-    def __init__(self, class_uri: RDFTerm) -> None:
+    def __init__(self, class_id: int) -> None:
         """Initialize class partition.
 
         Args:
-            class_uri: URI of the class
+            class_id: HDT integer ID for this class
         """
-        self.class_uri = class_uri
+        self.class_id = class_id
         self.instance_count: int = 0
-        # Property -> PropertyPartition with target class breakdowns
-        self.property_partitions: dict[RDFTerm, PropertyPartition] = {}
+        # Predicate ID -> PropertyPartition with target class breakdowns
+        self.property_partitions: dict[int, PropertyPartition] = {}
 
-    def add_triple(self, predicate: RDFTerm, target_classes: frozenset[RDFTerm | None]) -> None:
+    def add_triple(self, pred_id: int, target_class_ids: frozenset[int]) -> None:
         """Record a triple for instances of this class.
 
         Args:
-            predicate: The property/predicate being used
-            target_classes: Classes the object belongs to, or {None} for literals/untyped
+            pred_id: The HDT integer ID of the predicate
+            target_class_ids: Class IDs the object belongs to, or {0} for literals/untyped
         """
-        if predicate not in self.property_partitions:
-            self.property_partitions[predicate] = PropertyPartition(predicate)
-        self.property_partitions[predicate].add_triple(target_classes)
+        if pred_id not in self.property_partitions:
+            self.property_partitions[pred_id] = PropertyPartition(pred_id)
+        self.property_partitions[pred_id].add_triple(target_class_ids)
 
     @property
     def triple_count(self) -> int:
@@ -94,13 +106,81 @@ class ClassPartition:
 
 
 class PartitionAnalyzer:
-    """Analyze class and property partitions in an RDF dataset."""
+    """Analyze class and property partitions in an RDF dataset.
+
+    All internal data structures use HDT integer IDs for efficiency.
+    ID-to-term mappings are stored for resolution during serialization.
+    """
 
     def __init__(self) -> None:
         """Initialize partition analyzer."""
-        self.class_partitions: dict[RDFTerm, ClassPartition] = {}
+        self.class_partitions: dict[int, ClassPartition] = {}
         # Dataset-level property counts (all triples, regardless of typing)
-        self.dataset_property_counts: dict[RDFTerm, int] = defaultdict(int)
+        self.dataset_property_counts: dict[int, int] = defaultdict(int)
+        # ID → term mappings for serialization
+        self.class_id_to_term: dict[int, RDFTerm] = {}
+        self.pred_id_to_term: dict[int, RDFTerm] = {}
+        # Reverse mappings for convenience lookups (term → ID)
+        self._term_to_class_id: dict[RDFTerm, int] = {}
+        self._term_to_pred_id: dict[RDFTerm, int] = {}
+
+    def class_partition_for(self, term: RDFTerm) -> ClassPartition | None:
+        """Look up a class partition by its RDFLib term.
+
+        Args:
+            term: The class URI
+
+        Returns:
+            The ClassPartition, or None if not found
+        """
+        class_id = self._term_to_class_id.get(term)
+        if class_id is None:
+            return None
+        return self.class_partitions.get(class_id)
+
+    def property_partition_for(
+        self, class_term: RDFTerm, pred_term: RDFTerm
+    ) -> PropertyPartition | None:
+        """Look up a property partition by class and predicate terms.
+
+        Args:
+            class_term: The class URI
+            pred_term: The predicate URI
+
+        Returns:
+            The PropertyPartition, or None if not found
+        """
+        cp = self.class_partition_for(class_term)
+        if cp is None:
+            return None
+        pred_id = self._term_to_pred_id.get(pred_term)
+        if pred_id is None:
+            return None
+        return cp.property_partitions.get(pred_id)
+
+    def has_class_partition(self, term: RDFTerm) -> bool:
+        """Check if a class partition exists for the given term.
+
+        Args:
+            term: The class URI
+
+        Returns:
+            True if a partition exists
+        """
+        class_id = self._term_to_class_id.get(term)
+        return class_id is not None and class_id in self.class_partitions
+
+    def has_property_partition(self, class_term: RDFTerm, pred_term: RDFTerm) -> bool:
+        """Check if a property partition exists for the given class and predicate.
+
+        Args:
+            class_term: The class URI
+            pred_term: The predicate URI
+
+        Returns:
+            True if the property partition exists
+        """
+        return self.property_partition_for(class_term, pred_term) is not None
 
     def analyze(
         self,
@@ -112,17 +192,12 @@ class PartitionAnalyzer:
 
         This is a two-pass process using ID-based iteration to avoid
         decompressing the HDT string dictionary:
-        1. First pass: identify all classes and count instances via rdf:type
-        2. Second pass: count property usage for each class, with target class breakdown
+        1. Pass 1: Identify all classes and count instances via rdf:type
+        2. Pass 2: Single sequential scan of all triples — counts dataset-level
+           property usage AND per-class property/target-class breakdowns
 
-        Only ~100 class IDs and ~100 predicate IDs are converted to rdflib
-        terms; the millions of subject/object terms are never decompressed.
-
-        Subject lookups use a single-entry cache (exploiting HDT's SPO
-        ordering), and object lookups use a bounded dict cleared in bulk
-        to avoid pymalloc arena fragmentation. Object-only terms (ID >
-        nb_shared) are skipped entirely since they can never be subjects
-        and thus have no rdf:type triples.
+        Only class IDs and predicate IDs are converted to rdflib terms;
+        the millions of subject/object terms are never decompressed.
 
         Args:
             document: HDT document to analyze
@@ -144,8 +219,7 @@ class PartitionAnalyzer:
         # eliminating millions of fruitless search_ids calls (~20 MB for 160M subjects).
         typed_bitmap = bytearray(nb_subjects // 8 + 1)
 
-        class_id_to_term: dict[int, RDFTerm] = {}
-
+        # --- Pass 1: Count instances per class ---
         _log("Pass 1: counting instances per class...")
 
         if type_pred_id != 0:
@@ -164,9 +238,10 @@ class PartitionAnalyzer:
             for class_id, count in class_id_counts.items():
                 term = document.id_to_term(class_id, 2)
                 if isinstance(term, URIRef):
-                    class_id_to_term[class_id] = term
-                    self.class_partitions[term] = ClassPartition(term)
-                    self.class_partitions[term].instance_count = count
+                    self.class_id_to_term[class_id] = term
+                    self._term_to_class_id[term] = class_id
+                    self.class_partitions[class_id] = ClassPartition(class_id)
+                    self.class_partitions[class_id].instance_count = count
 
             typed_count = sum(b.bit_count() for b in typed_bitmap)
             _log(f"  Found {len(self.class_partitions)} classes, {typed_count:,} typed subjects")
@@ -175,46 +250,47 @@ class PartitionAnalyzer:
 
         search_count = 0
 
-        def _search_types_by_id(term_id: int) -> frozenset[RDFTerm | None]:
+        def _search_types_by_id(term_id: int) -> frozenset[int]:
             """Look up rdf:type values for a term ID via HDT's SPO index."""
             nonlocal search_count
             search_count += 1
             triples, count = document.search_ids((term_id, type_pred_id, 0))  # type: ignore[arg-type]
             if count == 0:
                 return _EMPTY_FROZENSET
-            return frozenset(
-                class_id_to_term[o_id] for _, _, o_id in triples if o_id in class_id_to_term
-            )
-
-        # Subject cache: single-entry, exploits HDT's SPO ordering.
-        # Consecutive triples share the same subject, so caching just
-        # the last lookup gives near-100% hit rate with O(1) memory.
-        prev_subject_id: int = 0
-        prev_subject_types: frozenset[RDFTerm | None] = _EMPTY_FROZENSET
+            return frozenset(o_id for _, _, o_id in triples if o_id in self.class_id_to_term)
 
         # Object cache: bounded dict, cleared in bulk when full.
         # Unlike lru_cache (which evicts one-by-one, fragmenting pymalloc
         # arenas), bulk clearing lets the allocator free entire arenas.
-        obj_type_cache: dict[int, frozenset[RDFTerm | None]] = {}
+        obj_type_cache: dict[int, frozenset[int]] = {}
         cache_clears = 0
 
+        _log("Pass 2: counting properties and class partitions...")
+
+        # --- Pass 2: Single sequential scan of all triples ---
+        # Counts dataset-level property usage (all triples) and per-class
+        # property/target-class breakdowns (typed subjects only).
+        # Subject cache: single-entry, exploits HDT's SPO ordering.
+        # Consecutive triples share the same subject, so caching just
+        # the last lookup gives near-100% hit rate with O(1) memory.
+        prev_subject_id: int = 0
+        prev_subject_types: frozenset[int] = _EMPTY_FROZENSET
+
         # Predicate ID → rdflib term cache (small, ~100 entries)
-        pred_id_to_term: dict[int, RDFTerm] = {}
+        pred_id_to_term_local: dict[int, RDFTerm] = {}
 
-        _log("Pass 2: counting property usage per class...")
-
-        # Second pass: count property usage for each class with target class tracking
         all_triples, total_count = document.search_ids((0, 0, 0))  # type: ignore[arg-type]
         _log(f"  Total triples to process: {total_count:,}")
         for i, (s_id, p_id, o_id) in enumerate(all_triples):
             # Convert predicate ID to term (cached, ~100 unique predicates)
-            predicate = pred_id_to_term.get(p_id)
-            if predicate is None:
-                predicate = document.id_to_term(p_id, 1)
-                pred_id_to_term[p_id] = predicate
+            if p_id not in pred_id_to_term_local:
+                term = document.id_to_term(p_id, 1)
+                pred_id_to_term_local[p_id] = term
+                self.pred_id_to_term[p_id] = term
+                self._term_to_pred_id[term] = p_id
 
             # Count all properties at dataset level
-            self.dataset_property_counts[predicate] += 1
+            self.dataset_property_counts[p_id] += 1
 
             # Look up subject types (single-entry cache, SPO-ordered)
             # Bitmap check eliminates search_ids calls for untyped subjects
@@ -243,9 +319,8 @@ class PartitionAnalyzer:
                 target_classes = obj_classes if obj_classes else _UNTYPED_TARGET
 
             # Record triple for each class the subject belongs to
-            for class_uri in prev_subject_types:
-                if class_uri in self.class_partitions:
-                    self.class_partitions[class_uri].add_triple(predicate, target_classes)
+            for class_id in prev_subject_types:
+                self.class_partitions[class_id].add_triple(p_id, target_classes)
 
             if progress_fn and i % 10_000_000 == 0 and i > 0:
                 _log(
@@ -266,9 +341,10 @@ class PartitionAnalyzer:
         yield from self.class_partitions.values()
 
     def iter_dataset_properties(self) -> Iterator[tuple[RDFTerm, int]]:
-        """Iterate over dataset-level property counts.
+        """Iterate over dataset-level property counts, resolving IDs to terms.
 
         Yields:
-            Tuples of (predicate, count)
+            Tuples of (predicate_term, count)
         """
-        yield from self.dataset_property_counts.items()
+        for pred_id, count in self.dataset_property_counts.items():
+            yield (self.pred_id_to_term[pred_id], count)

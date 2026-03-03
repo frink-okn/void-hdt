@@ -78,7 +78,7 @@ def main(
         click.echo(f"  Distinct predicates: {document.nb_predicates}")
         click.echo(f"  Distinct objects: {document.nb_objects}")
 
-        # Analyze class and property partitions (two passes through data)
+        # Analyze class and property partitions (multi-pass through data)
         click.echo(f"Peak RSS before analysis: {_get_rss_gb():.1f} GB")
         click.echo("Analyzing class partitions...")
 

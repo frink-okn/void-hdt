@@ -30,9 +30,10 @@ class TestBasicPartitions:
 
         # Should have one class partition
         assert len(analyzer.class_partitions) == 1
-        assert EX.ClassA in analyzer.class_partitions
+        assert analyzer.has_class_partition(EX.ClassA)
 
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.instance_count == 1
         # Two triples: rdf:type and ex:name
         assert partition.triple_count == 2
@@ -52,7 +53,8 @@ class TestBasicPartitions:
         analyzer.analyze(reader)
 
         assert len(analyzer.class_partitions) == 1
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.instance_count == 3
         # 6 triples: 3 rdf:type + 3 ex:name
         assert partition.triple_count == 6
@@ -70,14 +72,16 @@ class TestBasicPartitions:
         analyzer.analyze(reader)
 
         assert len(analyzer.class_partitions) == 2
-        assert EX.Person in analyzer.class_partitions
-        assert EX.Company in analyzer.class_partitions
+        assert analyzer.has_class_partition(EX.Person)
+        assert analyzer.has_class_partition(EX.Company)
 
-        person_partition = analyzer.class_partitions[EX.Person]
+        person_partition = analyzer.class_partition_for(EX.Person)
+        assert person_partition is not None
         assert person_partition.instance_count == 1
         assert person_partition.triple_count == 2
 
-        company_partition = analyzer.class_partitions[EX.Company]
+        company_partition = analyzer.class_partition_for(EX.Company)
+        assert company_partition is not None
         assert company_partition.instance_count == 1
         assert company_partition.triple_count == 2
 
@@ -94,7 +98,8 @@ class TestBasicPartitions:
         analyzer.analyze(reader)
 
         assert len(analyzer.class_partitions) == 1
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.instance_count == 1
         # Only 2 triples from the typed subject
         assert partition.triple_count == 2
@@ -123,11 +128,13 @@ class TestSubjectWithMultipleTypes:
 
         # Each class partition should count 3 triples:
         # - 2 rdf:type triples + 1 ex:name triple
-        partition_a = analyzer.class_partitions[EX.ClassA]
+        partition_a = analyzer.class_partition_for(EX.ClassA)
+        assert partition_a is not None
         assert partition_a.instance_count == 1
         assert partition_a.triple_count == 3
 
-        partition_b = analyzer.class_partitions[EX.ClassB]
+        partition_b = analyzer.class_partition_for(EX.ClassB)
+        assert partition_b is not None
         assert partition_b.instance_count == 1
         assert partition_b.triple_count == 3
 
@@ -145,7 +152,9 @@ class TestSubjectWithMultipleTypes:
 
         # Each class should have exactly 1 instance
         for class_uri in [EX.ClassA, EX.ClassB, EX.ClassC]:
-            assert analyzer.class_partitions[class_uri].instance_count == 1
+            partition = analyzer.class_partition_for(class_uri)
+            assert partition is not None
+            assert partition.instance_count == 1
 
     def test_mixed_single_and_multi_typed_instances(self, create_document):
         """Mix of single-typed and multi-typed instances."""
@@ -163,10 +172,12 @@ class TestSubjectWithMultipleTypes:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition_a = analyzer.class_partitions[EX.ClassA]
+        partition_a = analyzer.class_partition_for(EX.ClassA)
+        assert partition_a is not None
         assert partition_a.instance_count == 2  # multi + singleA
 
-        partition_b = analyzer.class_partitions[EX.ClassB]
+        partition_b = analyzer.class_partition_for(EX.ClassB)
+        assert partition_b is not None
         assert partition_b.instance_count == 1  # only multi
 
     def test_duplicate_type_assertion_not_double_counted(self, create_document):
@@ -181,7 +192,8 @@ class TestSubjectWithMultipleTypes:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.instance_count == 1
 
 
@@ -200,17 +212,18 @@ class TestSubjectWithMultiplePredicates:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
+        partition = analyzer.class_partition_for(EX.Person)
+        assert partition is not None
         assert partition.instance_count == 1
         # 4 triples: rdf:type + name + age + email
         assert partition.triple_count == 4
 
         # Verify property partitions
         assert len(partition.property_partitions) == 4
-        assert RDF.type in partition.property_partitions
-        assert EX.name in partition.property_partitions
-        assert EX.age in partition.property_partitions
-        assert EX.email in partition.property_partitions
+        assert analyzer.has_property_partition(EX.Person, RDF.type)
+        assert analyzer.has_property_partition(EX.Person, EX.name)
+        assert analyzer.has_property_partition(EX.Person, EX.age)
+        assert analyzer.has_property_partition(EX.Person, EX.email)
 
         # Each property should have count of 1
         for prop_partition in partition.iter_property_partitions():
@@ -228,12 +241,14 @@ class TestSubjectWithMultiplePredicates:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
+        partition = analyzer.class_partition_for(EX.Person)
+        assert partition is not None
         assert partition.instance_count == 5
         assert partition.triple_count == 10  # 5 * 2 predicates
 
         # Property partition for ex:name should have count 5
-        name_partition = partition.property_partitions[EX.name]
+        name_partition = analyzer.property_partition_for(EX.Person, EX.name)
+        assert name_partition is not None
         assert name_partition.total_count == 5
 
     def test_instance_with_repeated_predicate_different_values(self, create_document):
@@ -248,11 +263,13 @@ class TestSubjectWithMultiplePredicates:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
+        partition = analyzer.class_partition_for(EX.Person)
+        assert partition is not None
         # 4 triples: 1 rdf:type + 3 ex:email
         assert partition.triple_count == 4
 
-        email_partition = partition.property_partitions[EX.email]
+        email_partition = analyzer.property_partition_for(EX.Person, EX.email)
+        assert email_partition is not None
         assert email_partition.total_count == 3
 
 
@@ -270,11 +287,11 @@ class TestObjectWithMultipleTypes:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        person_partition = analyzer.class_partitions[EX.Person]
-        works_for_partition = person_partition.property_partitions[EX.worksFor]
+        works_for_partition = analyzer.property_partition_for(EX.Person, EX.worksFor)
+        assert works_for_partition is not None
 
         # Should have target class partition for Company
-        target_classes = dict(works_for_partition.iter_target_classes())
+        target_classes = dict(works_for_partition.iter_target_classes(analyzer.class_id_to_term))
         assert EX.Company in target_classes
         assert target_classes[EX.Company] == 1
 
@@ -291,10 +308,10 @@ class TestObjectWithMultipleTypes:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        person_partition = analyzer.class_partitions[EX.Person]
-        works_for_partition = person_partition.property_partitions[EX.worksFor]
+        works_for_partition = analyzer.property_partition_for(EX.Person, EX.worksFor)
+        assert works_for_partition is not None
 
-        target_classes = dict(works_for_partition.iter_target_classes())
+        target_classes = dict(works_for_partition.iter_target_classes(analyzer.class_id_to_term))
         # Both Company and Organization should be target classes
         assert EX.Company in target_classes
         assert EX.Organization in target_classes
@@ -323,13 +340,13 @@ class TestObjectWithMultipleTypes:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        person_partition = analyzer.class_partitions[EX.Person]
-        works_for_partition = person_partition.property_partitions[EX.worksFor]
+        works_for_partition = analyzer.property_partition_for(EX.Person, EX.worksFor)
+        assert works_for_partition is not None
 
         # Total count is 2 (two worksFor triples)
         assert works_for_partition.total_count == 2
 
-        target_classes = dict(works_for_partition.iter_target_classes())
+        target_classes = dict(works_for_partition.iter_target_classes(analyzer.class_id_to_term))
         # Each target class should have count of 2
         assert target_classes[EX.Company] == 2
         assert target_classes[EX.LegalEntity] == 2
@@ -348,10 +365,10 @@ class TestMixedTypedAndUntypedObjects:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
-        name_partition = partition.property_partitions[EX.name]
+        name_partition = analyzer.property_partition_for(EX.Person, EX.name)
+        assert name_partition is not None
 
-        target_classes = dict(name_partition.iter_target_classes())
+        target_classes = dict(name_partition.iter_target_classes(analyzer.class_id_to_term))
         # Literal should have None as target class
         assert None in target_classes
         assert target_classes[None] == 1
@@ -367,10 +384,10 @@ class TestMixedTypedAndUntypedObjects:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
-        knows_partition = partition.property_partitions[EX.knows]
+        knows_partition = analyzer.property_partition_for(EX.Person, EX.knows)
+        assert knows_partition is not None
 
-        target_classes = dict(knows_partition.iter_target_classes())
+        target_classes = dict(knows_partition.iter_target_classes(analyzer.class_id_to_term))
         # Untyped URI should have None as target class
         assert None in target_classes
         assert len(target_classes) == 1
@@ -389,12 +406,12 @@ class TestMixedTypedAndUntypedObjects:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
-        works_for_partition = partition.property_partitions[EX.worksFor]
+        works_for_partition = analyzer.property_partition_for(EX.Person, EX.worksFor)
+        assert works_for_partition is not None
 
         assert works_for_partition.total_count == 2
 
-        target_classes = dict(works_for_partition.iter_target_classes())
+        target_classes = dict(works_for_partition.iter_target_classes(analyzer.class_id_to_term))
         assert EX.Company in target_classes
         assert target_classes[EX.Company] == 1
         assert None in target_classes
@@ -474,7 +491,8 @@ class TestDatasetPropertyPartitions:
         assert counts[RDF.type] == 1
 
         # But class partition should only count the typed subject's triples
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.triple_count == 2  # type + name for typed only
 
     def test_dataset_properties_with_multiple_predicates(self, create_document):
@@ -647,6 +665,137 @@ class TestVOIDGeneration:
         assert has_untyped, "Should have an untyped target class partition"
 
 
+class TestCountAccuracy:
+    """Test that counts are exact and consistent across all levels.
+
+    These tests verify that dataset property counts, class partition triple
+    counts, and property partition counts are all mutually consistent and
+    match what manual iteration would produce.
+    """
+
+    def test_dataset_property_counts_are_exact(self, create_document):
+        """Dataset property counts must equal actual triple counts per predicate."""
+        g = Graph()
+        # Mix of typed and untyped subjects with various predicates
+        g.add((EX.typed1, RDF.type, EX.ClassA))
+        g.add((EX.typed1, EX.p1, Literal("a")))
+        g.add((EX.typed1, EX.p2, Literal("b")))
+        g.add((EX.typed2, RDF.type, EX.ClassA))
+        g.add((EX.typed2, EX.p1, Literal("c")))
+        g.add((EX.untyped1, EX.p1, Literal("d")))
+        g.add((EX.untyped1, EX.p2, Literal("e")))
+        g.add((EX.untyped2, EX.p3, Literal("f")))
+
+        reader = create_document(g)
+        analyzer = PartitionAnalyzer()
+        analyzer.analyze(reader)
+
+        counts = dict(analyzer.iter_dataset_properties())
+        # Manually verify: count ALL triples per predicate
+        assert counts[RDF.type] == 2  # 2 rdf:type triples
+        assert counts[EX.p1] == 3  # typed1, typed2, untyped1
+        assert counts[EX.p2] == 2  # typed1, untyped1
+        assert counts[EX.p3] == 1  # untyped2
+
+        # Total across all predicates must equal total triples
+        total_from_counts = sum(counts.values())
+        assert total_from_counts == reader.total_triples
+
+    def test_class_partition_triples_sum_to_property_partitions(self, create_document):
+        """Class partition triple_count must equal sum of its property partition counts."""
+        g = Graph()
+        g.add((EX.a, RDF.type, EX.ClassA))
+        g.add((EX.a, EX.p1, Literal("x")))
+        g.add((EX.a, EX.p2, Literal("y")))
+        g.add((EX.a, EX.p2, Literal("z")))
+        g.add((EX.b, RDF.type, EX.ClassA))
+        g.add((EX.b, EX.p1, Literal("w")))
+
+        reader = create_document(g)
+        analyzer = PartitionAnalyzer()
+        analyzer.analyze(reader)
+
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
+
+        # triple_count should be the sum of all property partitions
+        prop_sum = sum(pp.total_count for pp in partition.iter_property_partitions())
+        assert partition.triple_count == prop_sum
+        # Manually: rdf:type(2) + p1(2) + p2(2) = 6
+        assert partition.triple_count == 6
+
+    def test_target_class_counts_consistent_with_total(self, create_document):
+        """Property partition total_count >= max target class count."""
+        g = Graph()
+        g.add((EX.person1, RDF.type, EX.Person))
+        g.add((EX.person2, RDF.type, EX.Person))
+        g.add((EX.company, RDF.type, EX.Company))
+        g.add((EX.org, RDF.type, EX.Organization))
+        g.add((EX.person1, EX.worksFor, EX.company))
+        g.add((EX.person2, EX.worksFor, EX.org))
+        g.add((EX.person1, EX.name, Literal("Alice")))
+        g.add((EX.person2, EX.name, Literal("Bob")))
+
+        reader = create_document(g)
+        analyzer = PartitionAnalyzer()
+        analyzer.analyze(reader)
+
+        works_for = analyzer.property_partition_for(EX.Person, EX.worksFor)
+        assert works_for is not None
+        assert works_for.total_count == 2
+
+        targets = dict(works_for.iter_target_classes(analyzer.class_id_to_term))
+        assert targets[EX.Company] == 1
+        assert targets[EX.Organization] == 1
+
+        name_pp = analyzer.property_partition_for(EX.Person, EX.name)
+        assert name_pp is not None
+        assert name_pp.total_count == 2
+        name_targets = dict(name_pp.iter_target_classes(analyzer.class_id_to_term))
+        # Literals are untyped
+        assert None in name_targets
+        assert name_targets[None] == 2
+
+    def test_multi_class_triple_counts_independent(self, create_document):
+        """When subject has multiple types, each class partition counts independently."""
+        g = Graph()
+        # Subject with 2 types
+        g.add((EX.item, RDF.type, EX.ClassA))
+        g.add((EX.item, RDF.type, EX.ClassB))
+        g.add((EX.item, EX.p1, Literal("val1")))
+        g.add((EX.item, EX.p2, Literal("val2")))
+
+        # Another subject with only ClassA
+        g.add((EX.other, RDF.type, EX.ClassA))
+        g.add((EX.other, EX.p1, Literal("val3")))
+
+        reader = create_document(g)
+        analyzer = PartitionAnalyzer()
+        analyzer.analyze(reader)
+
+        pa = analyzer.class_partition_for(EX.ClassA)
+        pb = analyzer.class_partition_for(EX.ClassB)
+        assert pa is not None
+        assert pb is not None
+
+        # ClassA: item has 4 triples (2 type + p1 + p2), other has 2 (type + p1) = 6
+        assert pa.triple_count == 6
+        assert pa.instance_count == 2
+
+        # ClassB: item has 4 triples (2 type + p1 + p2) = 4
+        assert pb.triple_count == 4
+        assert pb.instance_count == 1
+
+        # Verify property partition counts within ClassA
+        p1_a = analyzer.property_partition_for(EX.ClassA, EX.p1)
+        assert p1_a is not None
+        assert p1_a.total_count == 2  # item + other
+
+        p1_b = analyzer.property_partition_for(EX.ClassB, EX.p1)
+        assert p1_b is not None
+        assert p1_b.total_count == 1  # only item
+
+
 class TestEdgeCases:
     """Test edge cases and potential pitfalls."""
 
@@ -669,7 +818,8 @@ class TestEdgeCases:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.instance_count == 2
         # Only rdf:type triples counted
         assert partition.triple_count == 2
@@ -684,13 +834,15 @@ class TestEdgeCases:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
+        partition = analyzer.class_partition_for(EX.Person)
+        assert partition is not None
         assert partition.instance_count == 1
         assert partition.triple_count == 2
 
         # Self-reference should have Person as target class
-        knows_partition = partition.property_partitions[EX.knows]
-        target_classes = dict(knows_partition.iter_target_classes())
+        knows_partition = analyzer.property_partition_for(EX.Person, EX.knows)
+        assert knows_partition is not None
+        target_classes = dict(knows_partition.iter_target_classes(analyzer.class_id_to_term))
         assert EX.Person in target_classes
 
     def test_circular_references(self, create_document):
@@ -705,7 +857,8 @@ class TestEdgeCases:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.Person]
+        partition = analyzer.class_partition_for(EX.Person)
+        assert partition is not None
         assert partition.instance_count == 2
         # 2 type triples + 2 knows triples
         assert partition.triple_count == 4
@@ -743,6 +896,7 @@ class TestEdgeCases:
         analyzer = PartitionAnalyzer()
         analyzer.analyze(reader)
 
-        partition = analyzer.class_partitions[EX.ClassA]
+        partition = analyzer.class_partition_for(EX.ClassA)
+        assert partition is not None
         assert partition.instance_count == num_instances
         assert partition.triple_count == num_instances * 2

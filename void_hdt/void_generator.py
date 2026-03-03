@@ -135,12 +135,19 @@ class VOIDGenerator:
     def add_class_partitions(self, analyzer: PartitionAnalyzer) -> None:
         """Add class partition information to the VOID description.
 
+        Resolves integer IDs to RDFLib terms using the analyzer's mappings.
+
         Args:
             analyzer: Partition analyzer with class and property data
         """
+        class_id_to_term = analyzer.class_id_to_term
+        pred_id_to_term = analyzer.pred_id_to_term
+
         for partition in analyzer.iter_partitions():
+            class_uri = class_id_to_term[partition.class_id]
+
             # Create a URI for this partition using MD5 hash of the class URI
-            class_hash = self._hash_iri(str(partition.class_uri))
+            class_hash = self._hash_iri(str(class_uri))
             partition_uri = self._create_partition_node(f"{self.dataset_uri}/class/{class_hash}")
 
             # Declare it as a class partition
@@ -148,7 +155,7 @@ class VOIDGenerator:
             self.graph.add((self.dataset_uri, VOID.classPartition, partition_uri))
 
             # Link to the class
-            self.graph.add((partition_uri, VOID["class"], partition.class_uri))
+            self.graph.add((partition_uri, VOID["class"], class_uri))
 
             # Add entity count (number of instances)
             self.graph.add(
@@ -170,7 +177,7 @@ class VOIDGenerator:
 
             # Add property partitions
             for prop_partition in partition.iter_property_partitions():
-                predicate = prop_partition.predicate
+                predicate = pred_id_to_term[prop_partition.predicate_id]
 
                 # Create property partition URI using MD5 hash of the predicate URI
                 predicate_hash = self._hash_iri(str(predicate))
@@ -195,7 +202,7 @@ class VOIDGenerator:
                 )
 
                 # Add target class partitions
-                for target_class, count in prop_partition.iter_target_classes():
+                for target_class, count in prop_partition.iter_target_classes(class_id_to_term):
                     if target_class is None:
                         # Literals or untyped URIs - use special hash
                         target_hash = self._hash_iri("__untyped__")
