@@ -148,6 +148,8 @@ class MockHDTDocument:
                     self._object_to_id[o],
                 )
             )
+        # Real HDT returns triples sorted by (S, P, O) IDs
+        matches.sort()
         return iter(matches), len(matches)
 
     def term_to_id(self, term: RDFTerm, kind: int) -> int:
