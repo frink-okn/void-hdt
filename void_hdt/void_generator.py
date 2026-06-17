@@ -288,7 +288,7 @@ WHERE {{
 """
                 qres = self.graph.query(target_query)
                 for row in qres:
-                    self.graph.add((row.s, row.p, row.o))
+                    self.graph.add((getattr(row, 's'), getattr(row, 'p'), getattr(row, 'o')))
 
     def serialize(self, format: str = "turtle") -> str:
         """Serialize the VOID description.
