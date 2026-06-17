@@ -95,6 +95,7 @@ def main(
         void_gen.add_dataset_statistics(document)
         void_gen.add_dataset_property_partitions(analyzer)
         void_gen.add_class_partitions(analyzer)
+        void_gen.add_labels_descriptions(analyzer, document)
 
         # Save output
         click.echo(f"Writing output to: {output}")

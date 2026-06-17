@@ -1,6 +1,7 @@
 """Generate VOID vocabulary descriptions."""
 
 import hashlib
+from itertools import batched
 
 from rdflib import RDF, RDFS, BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import VOID, XSD
@@ -237,6 +238,57 @@ class VOIDGenerator:
                             Literal(count, datatype=XSD.integer),
                         )
                     )
+
+    def add_labels_descriptions(self, analyzer: PartitionAnalyzer, document: HDTDocument) -> None:
+        """Retrieves labels and descriptions for entities.
+
+        First the graph itself is queried for these things,
+        and then the federated endpoint is re-queried for them.
+
+        Args:
+            document: HDT of the graph to be checked first for labels.
+        """
+        from rdflib import Namespace
+        from rdflib.namespace import DC, DCTERMS, PROV, RDFS, SDO, SKOS
+        SDOH = Namespace("http://schema.org/")
+
+        entities_to_check = set()
+        class_id_to_term = analyzer.class_id_to_term
+        pred_id_to_term = analyzer.pred_id_to_term
+        for partition in analyzer.iter_partitions():
+            class_uri = class_id_to_term[partition.class_id]
+            entities_to_check.add('<' + str(class_uri) + '>')
+            for prop_partition in partition.iter_property_partitions():
+                predicate = pred_id_to_term[prop_partition.predicate_id]
+                entities_to_check.add('<' + str(predicate) + '>')
+                for target_class, count in prop_partition.iter_target_classes(class_id_to_term):
+                    if target_class:
+                        entities_to_check.add('<' + str(target_class) + '>')
+
+        for pred, pred_options in [
+            [RDFS.label, [RDFS.label, SDO.name, SDOH.name, DCTERMS.title, DC.title,],],
+            [SKOS.definition, [DCTERMS.description, DC.description, SKOS.definition, SDO.description, SDOH.description, PROV.definition, RDFS.comment,],],
+        ]:
+            for pred_to_try in pred_options:
+                triples, cardinality = document.search((None, pred_to_try, None))
+                for s, p, o in triples:
+                    if s in entities_to_check:
+                        self.graph.add((s, pred, o))
+
+            for batch in batched(list(entities_to_check), 50):
+                target_query = f"""
+SELECT ?s ?p ?o
+WHERE {{
+    SERVICE <https://frink.apps.renci.org/federation/sparql> {{
+        values ?s {{ {" ".join(batch)} }}
+        values ?p {{ {" ".join([('<' + str(uri) + '>') for uri in pred_options])} }}
+        ?s ?p ?o .
+    }}
+}}
+"""
+                qres = self.graph.query(target_query)
+                for row in qres:
+                    self.graph.add((getattr(row, 's'), getattr(row, 'p'), getattr(row, 'o')))
 
     def serialize(self, format: str = "turtle") -> str:
         """Serialize the VOID description.
